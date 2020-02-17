@@ -112,7 +112,7 @@ int main() {
     return first == 0 ? last : first;
   };
 
-  int value = 255UL;
+  int value = 255;
 
   std::cout << std::find(first, last, value) - first << std::endl;
   std::cout << bug_find(first, last, value) - first << std::endl;
