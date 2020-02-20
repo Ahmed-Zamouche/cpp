@@ -17,19 +17,27 @@ struct Value {
   double value;
   explicit Value(const T &value) : value(value) {}
   std::string to_string() const {
-    std::string str = std::to_string(value) + " [";
+    std::string str = std::to_string(value);
 
+    if (U::m == 0 && U::kg == 0 && U::s == 0) {
+      return str;
+    }
+
+    str += " [";
     if (U::kg != 0) {
-      str += "kg^" + std::to_string(U::kg);
+      str += "kg" + (U::kg != 1 ? std::to_string(U::kg) + " " : " ");
     }
 
     if (U::m != 0) {
-      str += "m^" + std::to_string(U::m);
+      str += "m" + (U::m != 1 ? std::to_string(U::m) + " " : " ");
     }
 
     if (U::s != 0) {
-      str += "s^" + std::to_string(U::s);
+      str += "s" + (U::s != 1 ? std::to_string(U::s) + " " : " ");
     }
+
+    str.pop_back();
+
     str += "]";
     return str;
   }
@@ -160,22 +168,22 @@ int main() {
   cout << (3.14_m).to_string() << endl;
   cout << (2.5_kg).to_string() << endl;
   cout << (13.7_s).to_string() << endl;
-
-/* output: 
-3.140000 [m^1]
-13.900000 [s^1]
-1.400000 [kg^1]
-0.225899 [m^1s^-1]
-0.075300 [m^1s^-2]
-0.105420 [kg^1m^1s^-2]
-0.052710 [kg^1m^1s^-2]
-18.971793 [kg^-1m^-1s^2]
-1.000000 []
-0.210839 [kg^1m^1s^-2]
-0.210839 [kg^1m^1s^-2]
-0.011113 [kg^2m^2s^-4]
-3.140000 [m^1]
-2.500000 [kg^1]
-13.700000 [s^1]
+/*
+output: 
+3.140000 [m]
+13.900000 [s]
+1.400000 [kg]
+0.225899 [m s-1]
+0.075300 [m s-2]
+0.105420 [kg m s-2]
+0.052710 [kg m s-2]
+18.971793 [kg-1 m-1 s2]
+1.000000
+0.210839 [kg m s-2]
+0.210839 [kg m s-2]
+0.011113 [kg2 m2 s-4]
+3.140000 [m]
+2.500000 [kg]
+13.700000 [s]
 */
 }
