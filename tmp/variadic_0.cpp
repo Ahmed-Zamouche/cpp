@@ -1,5 +1,4 @@
 #include <type_traits>
-#include <vector>
 #include <iostream>
 #define NDEBUG
 
