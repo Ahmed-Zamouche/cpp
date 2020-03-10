@@ -1,6 +1,6 @@
 /*
  * Generic 01 Knapsack Problem  solver:
- *
+ * @see https://en.wikipedia.org/wiki/Knapsack_problem
  */
 #include <array>
 #include <iostream>
