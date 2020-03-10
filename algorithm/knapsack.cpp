@@ -4,6 +4,7 @@
  */
 #include <array>
 #include <iostream>
+#include <memory>
 
 //#define NDEBUG
 
@@ -35,26 +36,34 @@ struct Knapsack {
 template <typename T, typename TValue, typename TSpace>
 std::ostream &operator<<(std::ostream &os,
                          const Knapsack<T, TValue, TSpace> &knapsackItem) {
-  return os << *knapsackItem.ptr ;
+  return os << *knapsackItem.ptr;
 }
 
 // Top-Down with Memoization
 template <typename T, typename TValue, typename TSpace, size_t N = 0>
 TValue knapsack_recursive(std::array<Knapsack<T, TValue, TSpace>, N> &A, int i,
-                          TSpace capacity) {
-  if (capacity <= 0) {
+                          TSpace c, std::unique_ptr<TValue> &cache) {
+  if (c <= 0) {
     return TValue{};
   }
   if (i == 0) {
-    return (*A[0].space <= capacity) ? *A[0].value : TValue{};
+    return (*A[0].space <= c) ? *A[0].value : TValue{};
   }
 #ifndef NDEBUG
-  std::cout << i << ':' << ", {" << A[i] << "}, capacity: " << capacity
-            << std::endl;
+  std::cout << i << ':' << ", {" << A[i] << "}, capacity: " << c << std::endl;
 #endif
-  return std::max(
-      knapsack_recursive(A, i - 1, capacity),
-      *A[i].value + knapsack_recursive(A, i - 1, capacity - *A[i].space));
+  TValue *p_cache = cache.get();
+  if (p_cache[i - 1 + N * c] < 0) {
+    p_cache[i - 1 + N * c] = knapsack_recursive(A, i - 1, c, cache);
+  }
+  int c_minus_space_i = c - *A[i].space;
+
+  if (p_cache[i + N * c_minus_space_i] < 0) {
+    p_cache[i + N * c_minus_space_i] =
+        *A[i].value + knapsack_recursive(A, i - 1, c_minus_space_i, cache);
+  }
+
+  return std::max(p_cache[i - 1 + N * c], p_cache[i + N * c_minus_space_i]);
 }
 
 // Bottom-Up wit Tabbulation
@@ -70,12 +79,17 @@ TValue knapsack_iterative(std::array<Knapsack<T, TValue, TSpace>, N> &A,
 const bool KNAPSACK_USE_RECURSIVE = true;
 
 template <typename T, typename TValue, typename TSpace, size_t N = 0>
-TValue knapsack(std::array<Knapsack<T, TValue, TSpace>, N> &A,
-                TSpace capacity) {
+TValue knapsack(std::array<Knapsack<T, TValue, TSpace>, N> &A, TSpace C) {
   if (KNAPSACK_USE_RECURSIVE) {
-    return knapsack_recursive(A, A.size() - 1, capacity);
+    std::unique_ptr<TValue> cache = std::make_unique<TValue>(N * C);
+    for (size_t i = 0; i < N; ++i) {
+      for (size_t j = 0; j < C; ++j) {
+        cache.get()[i + N * j] = TValue{-1};
+      }
+    }
+    return knapsack_recursive(A, N - 1, C, cache);
   } else {
-    return knapsack_iterative(A, capacity);
+    return knapsack_iterative(A, C);
   }
 }
 
@@ -106,7 +120,7 @@ int main() {
         &items[i]._value, &items[i]._space, &items[i]));
   }
 
-  int capacity = 17;
+  int capacity = 11;
 
   cout << knapsack(knapsackItems, capacity) << endl;
 }
