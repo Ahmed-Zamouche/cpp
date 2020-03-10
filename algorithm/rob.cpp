@@ -1,4 +1,8 @@
-//House Robber algorithm
+/**
+ * House Robber algorithm
+ * Given a sequence of positive numbers, find the maximum sum of subsequence
+ * such as no two numbers in the subsequence are adjacent in the sequence.
+ */
 #include <array>
 #include <cstring>
 #include <iostream>
