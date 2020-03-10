@@ -35,8 +35,7 @@ struct Knapsack {
 template <typename T, typename TValue, typename TSpace>
 std::ostream &operator<<(std::ostream &os,
                          const Knapsack<T, TValue, TSpace> &knapsackItem) {
-  return os << "ptr: " << knapsackItem.ptr << ", value: " << knapsackItem.value
-            << ", space: " << knapsackItem.space;
+  return os << *knapsackItem.ptr ;
 }
 
 // Top-Down with Memoization
@@ -80,23 +79,13 @@ TValue knapsack(std::array<Knapsack<T, TValue, TSpace>, N> &A,
   }
 }
 
-template <typename T, typename TValue, typename TSpace, size_t N = 0>
-TValue knapsack(std::array<T, N> &A, TSpace capacity) {
-  std::array<Knapsack<T, TValue, TSpace>, N> knapsackItems;
-  for (size_t i = 0; i < A.size(); ++i) {
-    knapsackItems[i] =
-        std::move(Knapsack<T, int, int>(&A[i].value, &A[i].space, &A[i]));
-  }
-  return knapsack<T, TValue, TSpace, N>(knapsackItems, capacity);
-}
-
 struct Item {
-  int value{};
-  int space{};
-  bool operator<(const Item &o) const { return value < o.value; }
+  int _value{};
+  int _space{};
+  bool operator<(const Item &o) const { return _value < o._value; }
 };
 std::ostream &operator<<(std::ostream &os, const Item &item) {
-  return os << "value: " << item.value << ", space: " << item.space;
+  return os << "value: " << item._value << ", space: " << item._space;
 }
 using std::cin;
 using std::cout;
@@ -110,8 +99,14 @@ int main() {
     cout << '{' << item << '}' << endl;
   }
   cout << endl;
+  // wray
+  std::array<Knapsack<Item, int, int>, 5> knapsackItems;
+  for (size_t i = 0; i < items.size(); ++i) {
+    knapsackItems[i] = std::move(Knapsack<Item, int, int>(
+        &items[i]._value, &items[i]._space, &items[i]));
+  }
 
   int capacity = 17;
 
-  cout << knapsack<Item, int, int>(items, capacity) << endl;
+  cout << knapsack(knapsackItems, capacity) << endl;
 }
