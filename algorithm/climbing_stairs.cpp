@@ -1,4 +1,8 @@
-//Dynamic Programming – Stairs Climbing Puzzle
+/**
+ * Dynamic Programming – Stairs Climbing Puzzle
+ * Given a staircase, find total number of ways to reach the n’th step from the
+ * bottom using at most m <  n  steps at the time.
+ */
 #include <algorithm>
 #include <iostream>
 #include <sstream>
@@ -25,13 +29,13 @@ void climbing_stairs_iterative(T n, T m, T *cache) {
   for (T i = m; i < n; ++i) {
     cache[i] = 0;
     for (T j = 0; j < m; ++j) {
-      cache[i] += cache[i - j -1];
+      cache[i] += cache[i - j - 1];
     }
   }
 }
 
 template <typename T>
-T * climbing_stairs(T n, T m) {
+T *climbing_stairs(T n, T m) {
   T *cache = new T[n];
   climbing_stairs_iterative(n, m, cache);
   return cache;
@@ -39,11 +43,11 @@ T * climbing_stairs(T n, T m) {
 
 using namespace std;
 int main() {
-    //example of climbing 64 stairs with at most 4 steps
-    long long n = 64, m=4; 
-    long long *cache = climbing_stairs(n, m);
-    for(long long i = 0; i < n; ++i){
-        cout << i << ": "<< cache [i]<< endl;
-    }
-    return 0; 
+  // example of climbing 64 stairs with at most 4 steps
+  long long n = 64, m = 4;
+  long long *cache = climbing_stairs(n, m);
+  for (long long i = 0; i < n; ++i) {
+    cout << i << ": " << cache[i] << endl;
+  }
+  return 0;
 }
