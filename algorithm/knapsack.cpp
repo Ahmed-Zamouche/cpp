@@ -99,7 +99,7 @@ int main() {
     cout << '{' << item << '}' << endl;
   }
   cout << endl;
-  // wray
+  // wrap Item with Knapsack an invoke the algorithm
   std::array<Knapsack<Item, int, int>, 5> knapsackItems;
   for (size_t i = 0; i < items.size(); ++i) {
     knapsackItems[i] = std::move(Knapsack<Item, int, int>(
