@@ -16,11 +16,11 @@
  */
 template <typename T, typename TValue, typename TSpace>
 struct Knapsack {
-  TValue value{};
-  TSpace space{};
+  TValue *value{};
+  TSpace *space{};
   T *ptr{};
   Knapsack() {}
-  Knapsack(TValue &value, TSpace &space, T *ptr)
+  Knapsack(TValue *value, TSpace *space, T *ptr)
       : value(value), space(space), ptr(ptr) {}
   Knapsack<T, TValue, TSpace> &operator=(Knapsack<T, TValue, TSpace> &&o) {
     if (this != &o) {
@@ -47,7 +47,7 @@ TValue knapsack_recursive(std::array<Knapsack<T, TValue, TSpace>, N> &A, int i,
     return TValue{};
   }
   if (i == 0) {
-    return (A[0].space <= capacity) ? A[0].value : TValue{};
+    return (*A[0].space <= capacity) ? *A[0].value : TValue{};
   }
 #ifndef NDEBUG
   std::cout << i << ':' << ", {" << A[i] << "}, capacity: " << capacity
@@ -55,7 +55,7 @@ TValue knapsack_recursive(std::array<Knapsack<T, TValue, TSpace>, N> &A, int i,
 #endif
   return std::max(
       knapsack_recursive(A, i - 1, capacity),
-      A[i].value + knapsack_recursive(A, i - 1, capacity - A[i].space));
+      *A[i].value + knapsack_recursive(A, i - 1, capacity - *A[i].space));
 }
 
 // Bottom-Up wit Tabbulation
@@ -85,7 +85,7 @@ TValue knapsack(std::array<T, N> &A, TSpace capacity) {
   std::array<Knapsack<T, TValue, TSpace>, N> knapsackItems;
   for (size_t i = 0; i < A.size(); ++i) {
     knapsackItems[i] =
-        std::move(Knapsack<T, int, int>(A[i].value, A[i].space, &A[i]));
+        std::move(Knapsack<T, int, int>(&A[i].value, &A[i].space, &A[i]));
   }
   return knapsack<T, TValue, TSpace, N>(knapsackItems, capacity);
 }
@@ -110,7 +110,8 @@ int main() {
     cout << '{' << item << '}' << endl;
   }
   cout << endl;
-  
+
   int capacity = 17;
+
   cout << knapsack<Item, int, int>(items, capacity) << endl;
 }
