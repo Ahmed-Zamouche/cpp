@@ -66,17 +66,36 @@ TValue knapsack_recursive(std::array<Knapsack<T, TValue, TSpace>, N> &A, int i,
   return std::max(p_cache[i - 1 + N * c], p_cache[i + N * c_minus_space_i]);
 }
 
-// Bottom-Up wit Tabbulation
+// Bottom-Up with Tabbulation
 template <typename T, typename TValue, typename TSpace, size_t N = 0>
 TValue knapsack_iterative(std::array<Knapsack<T, TValue, TSpace>, N> &A,
-                          TSpace capacity) {
-  for (size_t i = 0; i < A.size(); ++i) {
+                          TSpace capacity, std::unique_ptr<TValue> &cache) {
+  TValue *p_cache = cache.get();
+
+  for (size_t i = 0; i < N; ++i) {
+    for (size_t j = 0; j <= capacity; ++j) {
+      if (i == 0 || j == 0) {
+        p_cache[i + N * j] = TValue{};
+      }
+      if (*A[i].space > j) {
+        p_cache[i + N * j] = p_cache[i - 1 + N * j];
+      } else {
+        int c_minus_space_i = j - *A[i].space;
+        p_cache[i + N * j] =
+            std::max(*A[i].value + p_cache[i - 1 + N * c_minus_space_i],
+                     p_cache[i - 1 + N * j]);
+      }
+#ifndef NDEBUG
+      std::cout << i << ':' << ", {" << A[i] << "}, capacity: " << j << ", "
+                << p_cache[i + N * j] << std::endl;
+#endif
+    }
   }
 
-  return TValue{0};
+  return p_cache[N - 1 + N * capacity];
 }
 
-const bool KNAPSACK_USE_RECURSIVE = true;
+const bool KNAPSACK_USE_RECURSIVE = false;
 
 template <typename T, typename TValue, typename TSpace, size_t N = 0>
 TValue knapsack(std::array<Knapsack<T, TValue, TSpace>, N> &A, TSpace C) {
@@ -89,7 +108,8 @@ TValue knapsack(std::array<Knapsack<T, TValue, TSpace>, N> &A, TSpace C) {
     }
     return knapsack_recursive(A, N - 1, C, cache);
   } else {
-    return knapsack_iterative(A, C);
+    std::unique_ptr<TValue> cache = std::make_unique<TValue>(N * (C + 1));
+    return knapsack_iterative(A, C, cache);
   }
 }
 
@@ -120,7 +140,7 @@ int main() {
         &items[i]._value, &items[i]._space, &items[i]));
   }
 
-  int capacity = 11;
+  int capacity = 5;
 
   cout << knapsack(knapsackItems, capacity) << endl;
 }
