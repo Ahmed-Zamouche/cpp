@@ -1,343 +1,237 @@
-#include <algorithm>
+#include <array>
 #include <atomic>
-#include <cmath>
-//#include <functional>
-#include <cstdint>
-#include <cstring>
+#include <cassert>
 #include <iostream>
-#include <map>
 #include <memory>
 #include <sstream>
-#include <vector>
-#include <cassert>
+#include <string>
+#include <utility>
 
-//#define NDEBUG
+#ifndef NDEBUG
+    #define LOG_EVENT(msg) std::cout << msg << '\n'
+#else
+    #define LOG_EVENT(msg) do {} while (false)
+#endif
 
 class Object {
-
 private:
-	static std::atomic<int> ids;
-
-	Object& copy(const Object &o) {
-		if (this != &o) {
-			name = o.name;
-#ifndef NDEBUG
-			std::cout << "Object `" << to_string() << "` copied\n";
-#endif
-		}
-		return *this;
-	}
-
-	Object& move(Object &&o) {
-		if (this != &o) {
-			name = std::move(o.name);
-#ifndef NDEBUG
-			std::cout << "Object `" << to_string() << "` moved\n";
-#endif
-		}
-		return *this;
-	}
+    static inline std::atomic<int> s_ids{0};
 
 protected:
-	int id = Object::ids++;
-	std::string name { "noname" };
+    int id = s_ids++;
+    std::string name{"noname"};
 
 public:
+    explicit Object(std::string name) : name(std::move(name)) {
+        LOG_EVENT("Object(std::string &) `" << to_string() << "` created");
+    }
 
-	Object(const std::string &name) :
-			name(name) {
-#ifndef NDEBUG
-		std::cout << "Object(std::string &) `" << to_string() << "` created\n";
-#endif
-	}
+    Object() {
+        LOG_EVENT("Object() `" << to_string() << "` created");
+    }
 
-	Object() {
-#ifndef NDEBUG
-		std::cout << "Object() `" << to_string() << "` created\n";
-#endif
-	}
+    virtual ~Object() {
+        LOG_EVENT("Object `" << to_string() << "` destroyed");
+    }
 
-	Object& operator=(const Object &o) {
-		return copy(o);
-	}
+    Object(const Object& o) : id(s_ids++), name(o.name) {
+        LOG_EVENT("Object `" << to_string() << "` copied");
+    }
 
-	Object(const Object &o) {
-		copy(o);
-	}
+    Object& operator=(const Object& o) {
+        if (this != &o) {
+            name = o.name;
+            LOG_EVENT("Object `" << to_string() << "` copied");
+        }
+        return *this;
+    }
 
-	Object& operator=(Object &&o) {
-		return move(std::forward<Object&&>(o));
-	}
+    Object(Object&& o) noexcept : id(s_ids++), name(std::move(o.name)) {
+        LOG_EVENT("Object `" << to_string() << "` moved");
+    }
 
-	Object(Object &&o) noexcept {
-		move(std::forward<Object&&>(o));
-	}
+    Object& operator=(Object&& o) noexcept {
+        if (this != &o) {
+            name = std::move(o.name);
+            LOG_EVENT("Object `" << to_string() << "` moved");
+        }
+        return *this;
+    }
 
-	bool operator<(const Object &o) const {
-		return id < o.id;
-	}
+    bool operator<(const Object& o) const noexcept {
+        return id < o.id;
+    }
 
-	virtual std::string to_string() const {
-		std::stringstream ss;
-		ss << "Object: {id: " << id << ", name: " << name << '}';
-		return ss.str();
-	}
-
-	virtual ~Object() {
-#ifndef NDEBUG
-		std::cout << "Object `" << to_string() << "` destroyed\n";
-#endif
-	}
-
+    virtual std::string to_string() const {
+        std::ostringstream ss;
+        ss << "Object: {id: " << id << ", name: " << name << '}';
+        return ss.str();
+    }
 };
 
-std::atomic<int> Object::ids(0);
-
-std::ostream& operator<<(std::ostream &os, const Object &obj) {
-	return os << obj.to_string();
+inline std::ostream& operator<<(std::ostream& os, const Object& obj) {
+    return os << obj.to_string();
 }
 
-class Base: public Object {
+class Base : public Object {
+public:
+    static constexpr std::size_t SIZE = 32;
 
 private:
-	static const int SIZE = 32;
-	int *buffer = nullptr;
-
-	Base& copy(const Base &o) {
-		if (this != &o) {
-			if (buffer == nullptr) {
-				buffer = new int[Base::SIZE];
-			}
-			memcpy(buffer, o.buffer, Base::SIZE * sizeof(int));
-#ifndef NDEBUG
-			std::cout << "Base `" << to_string() << "` copied\n";
-#endif
-		}
-		return *this;
-	}
-
-	Base& move(Base &&o) {
-		if (this != &o) {
-			int *ptr = buffer;
-			buffer = o.buffer;
-			//delegate the deletion to other `o`
-			o.buffer = ptr;
-#ifndef NDEBUG
-			std::cout << "Base `" << to_string() << "` moved\n";
-#endif
-		}
-		return *this;
-	}
-
-protected:
+    std::unique_ptr<std::array<int, SIZE>> buffer;
 
 public:
+    explicit Base(std::string name)
+        : Object(std::move(name)),
+          buffer(std::make_unique<std::array<int, SIZE>>()) {
+        buffer->fill(0);
+        LOG_EVENT("Base(std::string &) `" << to_string() << "` created");
+    }
 
-	Base(const std::string &name) :
-			Object(name) {
-		buffer = new int[Base::SIZE]();
-#ifndef NDEBUG
-		std::cout << "Base(std::string &) `" << to_string() << "` created\n";
-#endif
-	}
+    Base()
+        : buffer(std::make_unique<std::array<int, SIZE>>()) {
+        buffer->fill(0);
+        LOG_EVENT("Base() `" << to_string() << "` created");
+    }
 
-	Base() {
-		buffer = new int[Base::SIZE]();
-#ifndef NDEBUG
-		std::cout << "Base() `" << to_string() << "` created\n";
-#endif
-	}
+    ~Base() override {
+        LOG_EVENT("Base `" << to_string() << "` destroyed");
+    }
 
-	Base& operator=(const Base &o) {
-		Object::operator=(o);
-		return copy(o);
-	}
+    Base(const Base& o)
+        : Object(o),
+          buffer(o.buffer ? std::make_unique<std::array<int, SIZE>>(*o.buffer) : nullptr) {
+        LOG_EVENT("Base `" << to_string() << "` copied");
+    }
 
-	Base(const Base &o) :
-			Object(o) {
-		copy(o);
-	}
+    Base& operator=(const Base& o) {
+        if (this != &o) {
+            Object::operator=(o);
+            if (o.buffer) {
+                buffer = std::make_unique<std::array<int, SIZE>>(*o.buffer);
+            } else {
+                buffer.reset();
+            }
+            LOG_EVENT("Base `" << to_string() << "` copied");
+        }
+        return *this;
+    }
 
-	Base& operator=(Base &&o) {
-		Object::operator=(std::forward<Base&&>(o));
-		return move(std::forward<Base&&>(o));
-	}
+    Base(Base&& o) noexcept = default;
+    Base& operator=(Base&& o) noexcept = default;
 
-	Base(Base &&o) noexcept :
-			Object(std::move(o)) {
-		move(std::forward<Base&&>(o));
-	}
-
-	virtual ~Base() {
-#ifndef NDEBUG
-		std::cout << "Base `" << to_string() << "` destroyed\n";
-#endif
-		delete[] buffer;
-		buffer = nullptr;
-	}
-
-	virtual std::string to_string() const {
-		std::stringstream ss;
-		ss << "Base: {" << Object::to_string() << ", buffer: " << buffer
-				<< +"}";
-		return ss.str();
-	}
-
+    std::string to_string() const override {
+        std::ostringstream ss;
+        ss << "Base: {" << Object::to_string() << ", buffer: " << static_cast<const void*>(buffer.get()) << "}";
+        return ss.str();
+    }
 };
 
-template<class T>
-class Derived: public Base {
-
+template <class T>
+class Derived : public Base {
 private:
-	T value { };
-
-	Derived& copy(const Derived &o) {
-		if (this != &o) {
-			value = o.value;
-#ifndef NDEBUG
-			std::cout << "Derived `" << to_string() << "` copied\n";
-#endif
-		}
-		return *this;
-	}
-
-	Derived& move(Derived &&o) {
-		if (this != &o) {
-			value = o.value;
-#ifndef NDEBUG
-			std::cout << "Derived `" << to_string() << "` moved\n";
-#endif
-		}
-		return *this;
-	}
+    T value{};
 
 public:
+    explicit Derived(std::string name) : Base(std::move(name)) {
+        LOG_EVENT("Derived(std::string &) `" << to_string() << "` created");
+    }
 
-	Derived(const std::string &name) :
-			Base(name) {
+    Derived() {
+        LOG_EVENT("Derived() `" << to_string() << "` created");
+    }
+
+    ~Derived() override {
+        LOG_EVENT("Derived `" << to_string() << "` destroyed");
+    }
+
+    Derived(const Derived&) = default;
+    Derived& operator=(const Derived&) = default;
+    Derived(Derived&&) noexcept = default;
+    Derived& operator=(Derived&&) noexcept = default;
+
+    Derived operator++(int) { // Postfix
+        Derived r = *this;
+        ++(*this);
 #ifndef NDEBUG
-		std::cout << "Derived(std::string &) `" << to_string() << "` created\n";
+        std::cout << "    Derived++ `" << to_string() << "`\n";
 #endif
-	}
+        return r;
+    }
 
-	Derived() {
+    Derived& operator++() { // Prefix
+        ++value;
 #ifndef NDEBUG
-		std::cout << "Derived() `" << to_string() << "` created\n";
+        std::cout << "    ++Derived `" << to_string() << "`\n";
 #endif
-	}
+        return *this;
+    }
 
-	Derived& operator=(const Derived &o) {
-		Base::operator=(o);
-		return copy(o);
-	}
-
-	Derived(const Derived &o) :
-			Base(o) {
-		copy(o);
-	}
-
-	Derived& operator=(Derived &&o) {
-		Base::operator=(std::forward<Derived&&>(o));
-		return move(std::forward<Derived&&>(o));
-	}
-
-	Derived(Derived &&o) noexcept :
-			Base(std::move(o)) {
-		move(std::forward<Derived&&>(o));
-	}
-
-	Derived operator++(int) { // Postfix
-		Derived r = *this;
-#ifndef NDEBUG
-		std::cout << "    Derived++ `" << to_string() << "`\n";
-#endif
-		value++;
-		return r;
-	}
-
-	Derived& operator++() { // Prefix
-		++value;
-#ifndef NDEBUG
-		std::cout << "    ++Derived `" << to_string() << "`\n";
-#endif
-		return *this;
-	}
-
-	virtual ~Derived() {
-#ifndef NDEBUG
-		std::cout << "Derived `" << to_string() << "` destroyed\n";
-#endif
-	}
-
-	virtual std::string to_string() const {
-		std::stringstream ss;
-		ss << "Derived: {" << Base::to_string() << ", value: " << value << "}";
-		return ss.str();
-	}
+    std::string to_string() const override {
+        std::ostringstream ss;
+        ss << "Derived: {" << Base::to_string() << ", value: " << value << "}";
+        return ss.str();
+    }
 };
 
-// -std=c++11 -Wall -Wextra  -Werror -pedantic -pedantic-errors
-// -fno-elide-constructors
 int main() {
-	// int choice = 5;
+    Base b("base");
 
-	Base b("base");
+    Derived<int> dInt0("derived_int");
+    Derived<float> dFloat0("derived_float");
 
-	Derived<int> dInt0("derived_int");
-	Derived<float> dFloat0("derived_float");
+    std::cout << '\n';
+    ++dInt0;
+    ++dInt0;
+    ++dFloat0;
+    std::cout << '\n';
 
-	std::cout << '\n';
-	++dInt0;
-	++dInt0;
-	++dFloat0;
-	std::cout << '\n';
+    // dangerous: static_cast downcasts without type validation
+    std::cout << "static cast" << '\n';
+    Derived<int> *pDi0 = static_cast<Derived<int>*>(&b);
+    Derived<float> *pDf = static_cast<Derived<float>*>(&b);
 
-	// dangerous
-	std::cout << "static cast" << '\n';
-	Derived<int> *pDi0 = static_cast<Derived<int>*>(&b);
-	Derived<float> *pDf = static_cast<Derived<float>*>(&b);
+    Base *pB;
+    pB = &dInt0;
+    Derived<float> *pDif = static_cast<Derived<float>*>(pB);
+    pB = &dFloat0;
+    Derived<int> *pDfi = static_cast<Derived<int>*>(pB);
 
-	Base *pB;
-	pB = &dInt0;
-	Derived<float> *pDif = static_cast<Derived<float>*>(pB);
-	pB = &dFloat0;
-	Derived<int> *pDfi = static_cast<Derived<int>*>(pB);
+    std::cout << *pB << '\n';
+    std::cout << *pDi0 << '\n';
+    std::cout << *pDf << '\n';
+    std::cout << *pDif << '\n';
+    std::cout << *pDfi << '\n';
+    std::cout << '\n';
 
-	std::cout << *pB << '\n';
-	std::cout << *pDi0 << '\n';
-	std::cout << *pDf << '\n';
-	std::cout << *pDif << '\n';
-	std::cout << *pDfi << '\n';
-	std::cout << '\n';
+    // safe alternative: dynamic_cast validates types at runtime and returns nullptr on failure
+    std::cout << "dynamic cast" << '\n';
+    Derived<int> *pDi1;
+    pDi1 = dynamic_cast<Derived<int>*>(&b);
+    assert(pDi1 == nullptr);
+    pDi1 = dynamic_cast<Derived<int>*>(&dFloat0);
+    assert(pDi1 == nullptr);
 
-	// make sure to remove  -Werror
-	std::cout << "dynamic cast" << '\n';
-	Derived<int> *pDi1;
-	pDi1 = dynamic_cast<Derived<int>*>(&b);
-	assert(pDi1 == nullptr);
-	pDi1 = dynamic_cast<Derived<int>*>(&dFloat0);
-	assert(pDi1 == nullptr);
+    pB = dynamic_cast<Base*>(&b);
+    pDi1 = dynamic_cast<Derived<int>*>(&dInt0);
 
-	pB = dynamic_cast<Base*>(&b);
-	pDi1 = dynamic_cast<Derived<int>*>(&dInt0);
+    std::cout << '\n';
+    std::cout << *pB << '\n';
+    std::cout << *pDi1 << '\n';
+    std::cout << '\n';
 
-	std::cout << '\n';
-	std::cout << *pB << '\n';
-	std::cout << *pDi1 << '\n';
-	std::cout << '\n';
+    // dangerous: use static_cast or dynamic_cast first
+    std::cout << "reinterpret_cast: C style cast" << '\n';
 
-	// dangerous use static_cast or dynamic_cast first
-	std::cout << "reinterpret_cast: C style cast" << '\n';
+    // Assign rvalue reference to Base
+    Base &&d0 = Derived<int>("derived_int_0");
+    Base &&d1 = static_cast<Base&&>(dFloat0);
 
-	// Assing left value using static cast
-	Base &&d0 = Derived<int>("derived_int_0");
-	Base &&d1 = static_cast<Base&&>(dFloat0);
+    std::cout << '\n';
+    std::cout << d0 << '\n';
+    std::cout << d1 << '\n';
+    std::cout << '\n';
 
-	std::cout << '\n';
-	std::cout << d0 << '\n';
-	std::cout << d1 << '\n';
-	std::cout << '\n';
-
-	std::cout << "--------\n";
-	return 0;
+    std::cout << "--------\n";
+    return 0;
 }
