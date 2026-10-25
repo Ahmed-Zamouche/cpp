@@ -1,10 +1,12 @@
 #include <array>
 #include <atomic>
 #include <cassert>
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <sstream>
 #include <string>
+#include <typeinfo>
 #include <utility>
 
 #ifndef NDEBUG
@@ -12,6 +14,10 @@
 #else
     #define LOG_EVENT(msg) do {} while (false)
 #endif
+
+// =============================================================================
+// Original Class Hierarchy (Untouched)
+// =============================================================================
 
 class Object {
 private:
@@ -167,6 +173,9 @@ public:
         return *this;
     }
 
+    void set_value(T new_value) { value = new_value; }
+    T get_value() const { return value; }
+
     std::string to_string() const override {
         std::ostringstream ss;
         ss << "Derived: {" << Base::to_string() << ", value: " << value << "}";
@@ -174,138 +183,238 @@ public:
     }
 };
 
+// =============================================================================
+// Main Learning Suite: Casts in Modern C++
+// =============================================================================
+
 int main() {
+    std::cout << "=========================================================\n";
+    std::cout << "             C++ CAST MASTERCLASS CURRICULUM             \n";
+    std::cout << "=========================================================\n\n";
+
     // -------------------------------------------------------------------------
-    // LESSON 1: Object Construction, Hierarchy Initialization & Operator Overloading
+    // LESSON 1: Upcasting (Implicit vs Explicit static_cast)
+    // Concept:
+    // - Derived "is-a" Base. Upcasting points to the base subobject.
+    // - Always safe and can be done implicitly without any cast keyword.
     // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 1: Upcasting (Derived* -> Base*) ---\n";
+        Derived<int> derived_int("derived_int");
 
-    // Calls Object("base") -> Base("base"). Allocates internal buffer.
-    Base b("base");
+        // Implicit upcast (preferred, completely safe)
+        Base* base_ptr_implicit = &derived_int;
 
-    // Instantiates class template for T = int and T = float.
-    // Order of construction: Object -> Base -> Derived<T>.
-    Derived<int> dInt0("derived_int");
-    Derived<float> dFloat0("derived_float");
+        // Explicit static_cast upcast (valid, identical behavior)
+        Base* base_ptr_explicit = static_cast<Base*>(&derived_int);
 
-    std::cout << '\n';
-    // Prefix increment (++value). Returns a reference (Derived<int>&) to the mutated instance.
-    ++dInt0;   // dInt0.value becomes 1
-    ++dInt0;   // dInt0.value becomes 2
-    ++dFloat0; // dFloat0.value becomes 1.0f
-    std::cout << '\n';
+        // Virtual dispatch correctly resolves to Derived<int>::to_string()
+        std::cout << "Polymorphic call via Base*: " << *base_ptr_implicit << '\n';
+        assert(base_ptr_implicit == base_ptr_explicit);
+        std::cout << '\n';
+    }
 
     // -------------------------------------------------------------------------
     // LESSON 2: static_cast Downcasting Pitfalls (Compile-Time Blind Trust)
-    //
-    // Learning Goal: Understand that static_cast performs NO runtime type checks.
-    // Downcasting a Base pointer to a Derived pointer when the underlying object
-    // is NOT actually that Derived type compiles fine, but causes UNDEFINED BEHAVIOR (UB)
-    // the moment you dereference or access derived members.
+    // Concept:
+    // - static_cast performs NO runtime checks. It trusts the programmer.
+    // - Downcasting a Base* that doesn't actually point to the target Derived type
+    //   compiles, but dereferencing causes UNDEFINED BEHAVIOR (UB).
     // -------------------------------------------------------------------------
-    std::cout << "--- static_cast (Blind Downcasts) ---" << '\n';
+    {
+        std::cout << "--- LESSON 2: static_cast Downcasting (Blind Downcast) ---\n";
+        Base standalone_base("standalone_base");
+        Derived<int> actual_derived_int("actual_derived_int");
 
-    // [UB 1]: 'b' is purely a Base instance. It has no 'Derived<int>::value' member.
-    // static_cast blindly assumes you know what you are doing.
-    Derived<int> *pDi0 = static_cast<Derived<int>*>(&b);
+        // Valid downcast: pointer really points to Derived<int>
+        Base* base_pointing_to_derived = &actual_derived_int;
+        Derived<int>* safe_downcast = static_cast<Derived<int>*>(base_pointing_to_derived);
+        std::cout << "Valid static downcast: " << safe_downcast->to_string() << '\n';
 
-    // [UB 2]: Exactly the same error, casting Base to Derived<float>.
-    Derived<float> *pDf = static_cast<Derived<float>*>(&b);
-
-    Base *pB;
-
-    // Upcast: Safe and implicit. A Derived<int> is-a Base.
-    pB = &dInt0;
-    // [UB 3 - Cross-cast through base]: pB actually points to Derived<int>,
-    // but static_cast forces it to become Derived<float>*.
-    // Derived<int> and Derived<float> are completely unrelated types in memory!
-    Derived<float> *pDif = static_cast<Derived<float>*>(pB);
-
-    // Upcast: Pointing pB to Derived<float>.
-    pB = &dFloat0;
-    // [UB 4 - Cross-cast through base]: pB actually points to Derived<float>,
-    // but static_cast forces it into Derived<int>*.
-    Derived<int> *pDfi = static_cast<Derived<int>*>(pB);
-
-    // Safe polymorphic call: pB points to dFloat0. Uses dynamic dispatch (vtable)
-    // to invoke Derived<float>::to_string().
-    std::cout << "*pB  : " << *pB << '\n';
-
-    // DANGEROUS: Dereferencing pointers obtained via invalid static_casts.
-    // If to_string() accesses 'value', it reads unallocated stack memory or
-    // interprets raw bits of an unrelated type (int vs float bit representation).
-    std::cout << "*pDi0: " << *pDi0 << '\n'; // Accesses 'value' on a raw Base object (UB)
-    std::cout << "*pDf : " << *pDf << '\n';  // Accesses 'value' on a raw Base object (UB)
-    std::cout << "*pDif: " << *pDif << '\n'; // Reads int bits as float (UB)
-    std::cout << "*pDfi: " << *pDfi << '\n'; // Reads float bits as int (UB)
-    std::cout << '\n';
+        // [DANGEROUS / UB]: 'standalone_base' is NOT a Derived<int>.
+        // Compiles cleanly, but gives an invalid pointer to non-existent 'value' member.
+        Derived<int>* invalid_derived_ptr = static_cast<Derived<int>*>(&standalone_base);
+        std::cout << "DANGEROUS - Reading UB pointer: " << *invalid_derived_ptr << '\n';
+        std::cout << '\n';
+    }
 
     // -------------------------------------------------------------------------
-    // LESSON 3: dynamic_cast (Runtime Type-Safe Downcasting & RTTI)
-    //
-    // Learning Goal: dynamic_cast queries the vtable (RTTI: Run-Time Type Information).
-    // Unlike static_cast:
-    // - If the target type does NOT match the real dynamic object, it returns nullptr (for pointers).
-    // - Requires at least one virtual function in the base class.
+    // LESSON 3: dynamic_cast with POINTERS (Safe RTTI Downcasting)
+    // Concept:
+    // - dynamic_cast uses Run-Time Type Information (RTTI) stored in the vtable.
+    // - If cast fails on a POINTER, it safely returns nullptr.
     // -------------------------------------------------------------------------
-    std::cout << "--- dynamic_cast (Safe RTTI Downcasts) ---" << '\n';
+    {
+        std::cout << "--- LESSON 3: dynamic_cast with Pointers (nullptr on Failure) ---\n";
+        Base standalone_base("standalone_base");
+        Derived<int> actual_derived_int("actual_derived_int");
 
-    Derived<int> *pDi1;
+        Base* base_pointing_to_base = &standalone_base;
+        Base* base_pointing_to_derived = &actual_derived_int;
 
-    // Safe Failure 1: 'b' is merely a Base, NOT a Derived<int>.
-    // dynamic_cast detects this at runtime and safely returns nullptr.
-    pDi1 = dynamic_cast<Derived<int>*>(&b);
-    assert(pDi1 == nullptr);
+        // Attempt 1: Fail expected (Base is not Derived<int>)
+        Derived<int>* failed_cast = dynamic_cast<Derived<int>*>(base_pointing_to_base);
+        if (failed_cast == nullptr) {
+            std::cout << "Success: dynamic_cast safely returned nullptr for invalid cast.\n";
+        }
+        assert(failed_cast == nullptr);
 
-    // Safe Failure 2: 'dFloat0' is Derived<float>, NOT Derived<int>.
-    // dynamic_cast detects the type mismatch and safely returns nullptr.
-    pDi1 = dynamic_cast<Derived<int>*>(&dFloat0);
-    assert(pDi1 == nullptr);
-
-    // Dynamic upcast (or exact match): b is Base, so casting to Base* succeeds.
-    pB = dynamic_cast<Base*>(&b);
-
-    // Safe Success: dInt0 IS dynamic type Derived<int>, so casting returns a valid pointer.
-    pDi1 = dynamic_cast<Derived<int>*>(&dInt0);
-    assert(pDi1 != nullptr);
-
-    std::cout << '\n';
-    std::cout << "*pB  : " << *pB << '\n';   // Prints Base: { ... }
-    std::cout << "*pDi1: " << *pDi1 << '\n'; // Prints Derived: { ... value: 2 }
-    std::cout << '\n';
+        // Attempt 2: Success expected (points to dynamic type Derived<int>)
+        Derived<int>* successful_cast = dynamic_cast<Derived<int>*>(base_pointing_to_derived);
+        assert(successful_cast != nullptr);
+        std::cout << "Success: dynamic_cast resolved valid pointer -> " << *successful_cast << '\n';
+        std::cout << '\n';
+    }
 
     // -------------------------------------------------------------------------
-    // LESSON 4: Rvalue References (&&) and Polymorphic Object Lifetime
-    //
-    // Learning Goal:
-    // 1. Temporary object lifetime extension via reference binding.
-    // 2. static_cast<Base&&> turns an lvalue into an xvalue (enabling moves/rvalue binding).
-    // 3. Polymorphic behavior under rvalue references.
+    // LESSON 4: dynamic_cast with REFERENCES (Throws std::bad_cast)
+    // Concept:
+    // - There is no such thing as a "null reference" in C++.
+    // - When dynamic_cast fails on a reference, it throws std::bad_cast!
     // -------------------------------------------------------------------------
-    std::cout << "--- Rvalue References (&&) & Lifetime Extension ---" << '\n';
+    {
+        std::cout << "--- LESSON 4: dynamic_cast with References (std::bad_cast) ---\n";
+        Base standalone_base("standalone_base");
+        Base& base_ref = standalone_base;
 
-    // A temporary Derived<int> is created on the right-hand side.
-    // Binding it to a const reference (const Base&) or an rvalue reference (Base&&)
-    // EXTENDS the lifetime of the temporary object to the lifetime of reference 'd0'.
-    Base &&d0 = Derived<int>("derived_int_0");
+        try {
+            std::cout << "Attempting invalid dynamic_cast on reference...\n";
+            // standalone_base is not Derived<int>, so this must throw!
+            Derived<int>& derived_ref = dynamic_cast<Derived<int>&>(base_ref);
+            // The following will never execute:
+            std::cout << derived_ref << '\n';
+        } catch (const std::bad_cast& e) {
+            std::cout << "Caught expected std::bad_cast exception: " << e.what() << '\n';
+        }
+        std::cout << '\n';
+    }
 
-    // 'dFloat0' is an existing named variable (an lvalue).
-    // To bind an rvalue reference (Base&&) to an lvalue, you must cast it to an xvalue.
-    // Note: This does NOT move anything by itself; it only treats dFloat0 as an rvalue reference.
-    Base &&d1 = static_cast<Base&&>(dFloat0);
+    // -------------------------------------------------------------------------
+    // LESSON 5: const_cast (Removing constness: Safe vs Undefined Behavior)
+    // Concept:
+    // - const_cast can only add or remove const/volatile qualifiers.
+    // - LEGAL: Modifying an originally NON-CONST object accessed via a const pointer/ref.
+    // - UNDEFINED BEHAVIOR: Modifying an originally CONST object (e.g. stored in read-only memory).
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 5: const_cast ---\n";
 
-    std::cout << '\n';
-    // Dynamic dispatch still works through references!
-    // d0 invokes Derived<int>::to_string() via the virtual table.
-    std::cout << "d0 (temporary): " << d0 << '\n';
-    // d1 invokes Derived<float>::to_string() via the virtual table.
-    std::cout << "d1 (cast lvalue): " << d1 << '\n';
-    std::cout << '\n';
+        // Case A: Safe modification of an originally non-const object
+        Derived<int> mutable_object("mutable_object");
+        mutable_object.set_value(10);
 
-    std::cout << "--------\n";
+        const Derived<int>* read_only_view = &mutable_object;
+        // read_only_view->set_value(20); // COMPILE ERROR: cannot mutate via const pointer
+
+        Derived<int>* writable_view = const_cast<Derived<int>*>(read_only_view);
+        writable_view->set_value(99); // Legal: underlying object was created non-const
+        std::cout << "Value safely modified through const_cast: " << mutable_object.get_value() << '\n';
+
+        // Case B: Demonstrating const_cast on a truly const object (Educational Warning)
+        const Derived<int> truly_const_object("const_object");
+        const Derived<int>* const_ptr = &truly_const_object;
+        Derived<int>* dangerous_ptr = const_cast<Derived<int>*>(const_ptr);
+        // dangerous_ptr->set_value(42); // DANGEROUS / UB: modifying an originally const object!
+        (void)dangerous_ptr;
+        std::cout << "Warning: Mutating truly_const_object via dangerous_ptr triggers Undefined Behavior!\n";
+        std::cout << '\n';
+    }
+
+    // -------------------------------------------------------------------------
+    // LESSON 6: Object Slicing vs Polymorphic References/Pointers
+    // Concept:
+    // - Passing or casting by VALUE invokes Base's copy constructor,
+    //   SLICING OFF the Derived portion (the value member is lost, vtable resets to Base).
+    // - Passing or casting by POINTER/REFERENCE retains the full derived object.
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 6: Object Slicing (Value Cast vs Reference Cast) ---\n";
+        Derived<int> full_derived("full_derived");
+        full_derived.set_value(777);
+
+        // SLICING OCCURS: Derived is copied into a value-type Base.
+        // Derived<int>::value is permanently dropped!
+        Base sliced_copy = static_cast<Base>(full_derived); // or: Base sliced_copy = full_derived;
+        std::cout << "Sliced Base copy (value lost, vtable is Base): " << sliced_copy << '\n';
+
+        // NO SLICING: Preserved via reference
+        Base& preserved_reference = full_derived;
+        std::cout << "Preserved Reference (polymorphism intact):     " << preserved_reference << '\n';
+        std::cout << '\n';
+    }
+
+    // -------------------------------------------------------------------------
+    // LESSON 7: reinterpret_cast (Raw Byte/Address Reinterpretation)
+    // Concept:
+    // - Reinterprets the raw bit pattern without conversion logic.
+    // - Used for low-level programming (pointer-to-integer, inspecting memory bytes).
+    // - Violates Strict Aliasing if used to access typed data arbitrarily.
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 7: reinterpret_cast (Raw Bit / Pointer Reinterpretation) ---\n";
+        Derived<int> item("item_bytes");
+
+        // 1. Pointer to Integer Address
+        auto raw_address = reinterpret_cast<std::uintptr_t>(&item);
+        std::cout << "Object memory address as integer: 0x" << std::hex << raw_address << std::dec << '\n';
+
+        // 2. Inspecting raw byte representation
+        auto* byte_ptr = reinterpret_cast<unsigned char*>(&item);
+        std::cout << "First 4 raw bytes in memory: ";
+        for (std::size_t i = 0; i < 4; ++i) {
+            std::cout << std::hex << static_cast<int>(byte_ptr[i]) << ' ';
+        }
+        std::cout << std::dec << "\n\n";
+    }
+
+    // -------------------------------------------------------------------------
+    // LESSON 8: static_cast to Rvalue Reference (Base&&) & Lifetime Extension
+    // Concept:
+    // - static_cast<Base&&>(lvalue) turns an lvalue into an xvalue (enables moving).
+    // - Binding a temporary to Base&& extends its lifetime to the reference's scope.
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 8: static_cast to Rvalue Reference (&&) ---\n";
+
+        // Lifetime extension of temporary Derived<int>
+        Base&& temporary_extended = Derived<int>("temporary_derived");
+        std::cout << "Temporary extended to scope of reference: " << temporary_extended << '\n';
+
+        // Cast lvalue to xvalue for moving / rvalue-binding
+        Derived<float> lvalue_float("lvalue_float");
+        Base&& rvalue_ref_to_lvalue = static_cast<Base&&>(lvalue_float);
+        std::cout << "Lvalue bound to rvalue ref via static_cast: " << rvalue_ref_to_lvalue << '\n';
+        std::cout << '\n';
+    }
+
+    // -------------------------------------------------------------------------
+    // LESSON 9: Cross-Casting (Unrelated Sibling Types)
+    // Concept:
+    // - static_cast CANNOT cast between unrelated sibling types Derived<int>* and Derived<float>*.
+    //   The compiler rejects it.
+    // - dynamic_cast checks the actual runtime type and returns nullptr safely.
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- LESSON 9: Cross-Casting Unrelated Types ---\n";
+        Derived<int> derived_int("derived_int");
+        Base* base_ptr = &derived_int;
+
+        // static_cast:
+        // Derived<float>* err = static_cast<Derived<float>*>(base_ptr); // Compiles blindly through Base*, but is UB!
+        // Derived<float>* err2 = static_cast<Derived<float>*>(&derived_int); // COMPILE ERROR! Direct sibling cast disallowed.
+
+        // dynamic_cast: Safely checks the RTTI and rejects the sibling cross-cast at runtime
+        Derived<float>* cross_cast_result = dynamic_cast<Derived<float>*>(base_ptr);
+        if (cross_cast_result == nullptr) {
+            std::cout << "Success: dynamic_cast correctly identified that Derived<int> is NOT Derived<float>.\n";
+        }
+        assert(cross_cast_result == nullptr);
+        std::cout << '\n';
+    }
+
+    std::cout << "=========================================================\n";
+    std::cout << "                   ALL LESSONS COMPLETED                 \n";
+    std::cout << "=========================================================\n";
+
     return 0;
-    // Destruction order at scope exit:
-    // 1. d0's temporary Derived<int> is destroyed (lifetime extension ends).
-    // 2. dFloat0 is destroyed (Derived -> Base -> Object).
-    // 3. dInt0 is destroyed.
-    // 4. b is destroyed.
 }
