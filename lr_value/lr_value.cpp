@@ -229,151 +229,206 @@ void relay_perfectly(T&& arg) {
 // =============================================================================
 
 int main() {
-    // Change this value (0 to 13) to test individual concepts:
-    int choice = 11;
+    std::cout << "=========================================================\n";
+    std::cout << "  MODERN C++ VALUE CATEGORIES & FORWARDING DEMO SUITE    \n";
+    std::cout << "=========================================================\n\n";
 
-    // 0: Named variable is an Lvalue
-    if (choice == 0) {
+    // -------------------------------------------------------------------------
+    // Lesson 0: Named variable is an Lvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 0: Named Variable (Lvalue) ---\n";
         Derived d0("derived_0");
         inspect_value(d0); // Calls lvalue overload
+        std::cout << '\n';
     }
 
-    // 1: Temporary object is a Prvalue
-    else if (choice == 1) {
+    // -------------------------------------------------------------------------
+    // Lesson 1: Temporary object is a Prvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 1: Temporary Object (Prvalue) ---\n";
         inspect_value(Derived("derived_1")); // Calls rvalue overload
+        std::cout << '\n';
     }
 
-    // 2: Return-by-value function produces a Prvalue (guaranteed elision in C++17)
-    else if (choice == 2) {
+    // -------------------------------------------------------------------------
+    // Lesson 2: Return-by-value function produces a Prvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 2: Return-by-Value (Prvalue / C++17 Elision) ---\n";
         inspect_value(create_derived()); // Calls rvalue overload
+        std::cout << '\n';
     }
 
-    // 3: Lvalue references are Lvalues
-    else if (choice == 3) {
+    // -------------------------------------------------------------------------
+    // Lesson 3: Lvalue references evaluate as Lvalues
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 3: Lvalue Reference ---\n";
         Derived d0("derived_0");
         Derived& lref = d0;
         inspect_value(lref); // Calls lvalue overload
+        std::cout << '\n';
     }
 
-    // 4: Named Rvalue Reference evaluates as an Lvalue inside expressions!
-    else if (choice == 4) {
+    // -------------------------------------------------------------------------
+    // Lesson 4: Named Rvalue Reference evaluates as an Lvalue!
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 4: Named Rvalue Reference evaluates as Lvalue ---\n";
         Derived&& rref = create_derived();
-        inspect_value(rref); // Calls LVALUE overload because 'rref' has a name
+        inspect_value(rref); // Calls LVALUE overload because 'rref' has a name!
+        std::cout << '\n';
     }
 
-    // 5: Postfix operator++ returns a temporary copy by value (Prvalue)
-    else if (choice == 5) {
+    // -------------------------------------------------------------------------
+    // Lesson 5: Postfix operator++ returns a temporary copy by value (Prvalue)
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 5: Postfix operator++ (Prvalue) ---\n";
         Derived d0("derived_0");
         inspect_value(d0++); // Calls rvalue overload
+        std::cout << '\n';
     }
 
-    // 6: Prefix operator++ returns *this by reference (Lvalue)
-    else if (choice == 6) {
+    // -------------------------------------------------------------------------
+    // Lesson 6: Prefix operator++ returns *this by reference (Lvalue)
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 6: Prefix operator++ (Lvalue Reference) ---\n";
         Derived d0("derived_0");
         inspect_value(++d0); // Calls lvalue overload
+        std::cout << '\n';
     }
 
-    // 7: Address-of (&) requires an Lvalue
-    else if (choice == 7) {
+    // -------------------------------------------------------------------------
+    // Lesson 7: Address-of operator (&) requires an Lvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 7: Address-of Operator (&) ---\n";
         Derived d0("derived_0");
         Derived* ptr = &++d0; // Valid: ++d0 is an lvalue
         // Derived* err = &(d0++); // COMPILE ERROR: cannot take address of prvalue
         inspect_value(*ptr);
+        std::cout << '\n';
     }
 
-    // 8: Pointer Dereference + Postfix returns a temporary copy (Prvalue)
-    else if (choice == 8) {
+    // -------------------------------------------------------------------------
+    // Lesson 8: Dereferencing unique_ptr + Postfix yields a Prvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 8: Heap Dereference + Postfix (Prvalue) ---\n";
         inspect_value((*make_heap_derived())++); // Calls rvalue overload
+        std::cout << '\n';
     }
 
-    // 9: Pointer Dereference + Prefix returns a reference (Lvalue)
-    else if (choice == 9) {
+    // -------------------------------------------------------------------------
+    // Lesson 9: Dereferencing unique_ptr + Prefix yields an Lvalue
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 9: Heap Dereference + Prefix (Lvalue) ---\n";
         inspect_value(++(*make_heap_derived())); // Calls lvalue overload
+        std::cout << '\n';
     }
 
-    // 10: std::move vs. Copy Assignment & The Moved-From State
-    else if (choice == 10) {
+    // -------------------------------------------------------------------------
+    // Lesson 10: std::move vs. Copy Assignment & The Moved-From State
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 10: Move vs Copy Assignment & Moved-From State ---\n";
         Derived d0("derived_0");
         Derived d1("derived_1");
         Derived d2("derived_2");
 
-        std::cout << "\n-- Move Assignment (d1 = std::move(d0)) --\n";
+        std::cout << "Move assigning d0 into d1:\n";
         d1 = std::move(d0);
         std::cout << "d0 (moved-from): " << d0 << '\n';
         std::cout << "d1 (new owner):  " << d1 << '\n';
 
-        std::cout << "\n-- Copy Assignment from moved-from object (d2 = d0) --\n";
-        d2 = d0;
+        std::cout << "Copy assigning moved-from d0 into d2:\n";
+        d2 = d0; // Safe: moved-from object is in a valid state
         std::cout << "d2:              " << d2 << '\n';
+        std::cout << '\n';
     }
 
-    // 11: Reference Collapsing in Explicit Type Aliases
-    // Rules:
+    // -------------------------------------------------------------------------
+    // Lesson 11: Reference Collapsing rules in Type Aliases
     //   &  + &  -> &
     //   &  + && -> &
     //   && + &  -> &
     //   && + && -> &&
-    else if (choice == 11) {
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 11: Reference Collapsing ---\n";
         Derived d("collapsing_demo");
 
         using LRef = Derived&;
         using RRef = Derived&&;
 
-        // Rule 1: (& + & -> &)
+        // Rule 1: & + & -> &
         using Rule1 = LRef&;
-        static_assert(std::is_same_v<Rule1, Derived&>, "Must collapse to Derived&");
+        static_assert(std::is_same_v<Rule1, Derived&>);
         Rule1 r1 = d;
         std::cout << "Rule 1 (& + & -> &):   ";
         inspect_value(r1);
 
-        // Rule 2: (& + && -> &)
+        // Rule 2: & + && -> &
         using Rule2 = LRef&&;
-        static_assert(std::is_same_v<Rule2, Derived&>, "Must collapse to Derived&");
+        static_assert(std::is_same_v<Rule2, Derived&>);
         Rule2 r2 = d;
         std::cout << "Rule 2 (& + && -> &):  ";
         inspect_value(r2);
 
-        // Rule 3: (&& + & -> &)
+        // Rule 3: && + & -> &
         using Rule3 = RRef&;
-        static_assert(std::is_same_v<Rule3, Derived&>, "Must collapse to Derived&");
+        static_assert(std::is_same_v<Rule3, Derived&>);
         Rule3 r3 = d;
         std::cout << "Rule 3 (&& + & -> &):  ";
         inspect_value(r3);
 
-        // Rule 4: (&& + && -> &&)
+        // Rule 4: && + && -> &&
         using Rule4 = RRef&&;
-        static_assert(std::is_same_v<Rule4, Derived&&>, "Must collapse to Derived&&");
+        static_assert(std::is_same_v<Rule4, Derived&&>);
         Rule4 r4 = create_derived();
         std::cout << "Rule 4 (&& + && -> &&): ";
         inspect_value(std::move(r4));
+        std::cout << '\n';
     }
 
-    // 12: Why We Need std::forward (The Forwarding Problem)
-    else if (choice == 12) {
+    // -------------------------------------------------------------------------
+    // Lesson 12: Why std::forward is needed (Flawed Forwarding)
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 12: The Forwarding Problem (Without std::forward) ---\n";
         Derived d("original_d");
 
-        std::cout << "--- 1. Passing temporary to relay_unconditionally_as_lvalue ---\n";
-        // Loss of rvalueness: passed rvalue, but wrapper calls lvalue overload
+        std::cout << "[Problem 1: Passed rvalue, but loses rvalueness]\n";
         relay_unconditionally_as_lvalue(create_derived());
 
-        std::cout << "\n--- 2. Passing lvalue to relay_unconditionally_as_rvalue ---\n";
-        // Dangerous move: passed lvalue, but wrapper forces it into rvalue overload
+        std::cout << "[Problem 2: Passed lvalue, but dangerously moved]\n";
         relay_unconditionally_as_rvalue(d);
+        std::cout << '\n';
     }
 
-    // 13: Perfect Forwarding with std::forward<T>
-    else if (choice == 13) {
+    // -------------------------------------------------------------------------
+    // Lesson 13: Perfect Forwarding with std::forward<T>
+    // -------------------------------------------------------------------------
+    {
+        std::cout << "--- 13: Perfect Forwarding (std::forward<T>) ---\n";
         Derived d("original_d");
 
-        std::cout << "--- Forwarding an Lvalue ---\n";
-        // T deduces to Derived& -> T&& collapses to Derived& -> forward yields Derived&
-        relay_perfectly(d);
+        std::cout << "Forwarding an Lvalue:\n";
+        relay_perfectly(d); // Calls LVALUE overload
 
-        std::cout << "\n--- Forwarding an Rvalue ---\n";
-        // T deduces to Derived -> T&& is Derived&& -> forward yields Derived&&
-        relay_perfectly(create_derived());
+        std::cout << "Forwarding an Rvalue:\n";
+        relay_perfectly(create_derived()); // Calls RVALUE overload
+        std::cout << '\n';
     }
 
-    std::cout << '\n';
+    std::cout << "=========================================================\n";
+    std::cout << "                      DEMO COMPLETE                      \n";
+    std::cout << "=========================================================\n";
+
     return 0;
 }
