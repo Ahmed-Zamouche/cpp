@@ -5,6 +5,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 #ifndef NDEBUG
@@ -12,6 +13,10 @@
 #else
     #define LOG_EVENT(msg) do {} while (false)
 #endif
+
+// =============================================================================
+// Class Hierarchy (Original Names Kept)
+// =============================================================================
 
 class Object {
 private:
@@ -34,7 +39,6 @@ public:
         LOG_EVENT("Object `" << to_string() << "` destroyed");
     }
 
-    // Preserve unique ID identity upon copy/move
     Object(const Object& o) : id(s_ids++), name(o.name) {
         LOG_EVENT("Object `" << to_string() << "` copied");
     }
@@ -79,7 +83,6 @@ public:
     static constexpr std::size_t SIZE = 32;
 
 private:
-    // C++17 RAII buffer replaces raw new[] / delete[]
     std::unique_ptr<std::array<int, SIZE>> buffer;
 
 public:
@@ -124,7 +127,8 @@ public:
 
     std::string to_string() const override {
         std::ostringstream ss;
-        ss << "Base: {" << Object::to_string() << ", buffer: " << static_cast<const void*>(buffer.get()) << "}";
+        ss << "Base: {" << Object::to_string() 
+           << ", buffer: " << static_cast<const void*>(buffer.get()) << "}";
         return ss.str();
     }
 };
@@ -146,21 +150,18 @@ public:
         LOG_EVENT("Derived `" << to_string() << "` destroyed");
     }
 
-    // Rule of Zero: let compiler manage members and Base subobjects cleanly
     Derived(const Derived&) = default;
     Derived& operator=(const Derived&) = default;
     Derived(Derived&&) noexcept = default;
     Derived& operator=(Derived&&) noexcept = default;
 
-    // Postfix ++: returns copy by value (prvalue)
     Derived operator++(int) {
-        Derived r = *this;
+        Derived copy = *this;
         ++(*this);
         LOG_EVENT("    Derived++ `" << to_string() << "`");
-        return r;
+        return copy;
     }
 
-    // Prefix ++: returns reference to self (lvalue)
     Derived& operator++() {
         ++value;
         LOG_EVENT("    ++Derived `" << to_string() << "`");
@@ -174,203 +175,205 @@ public:
     }
 };
 
-// Returns a unique_ptr by value (uses move semantics / NRVO)
-std::unique_ptr<Derived> foo() {
-    return std::make_unique<Derived>("unique_ptr");
+// =============================================================================
+// Helper Functions for Inspection and Forwarding
+// =============================================================================
+
+// Target Overload 1: Lvalue reference
+void inspect_value(const Derived& obj) {
+    std::cout << "[LVALUE overload called] -> " << obj << '\n';
 }
 
-// Returns an lvalue reference to static storage
-int& bar() {
-    static int s_int = 0;
-    return s_int;
+// Target Overload 2: Rvalue reference
+void inspect_value(Derived&& obj) {
+    std::cout << "[RVALUE overload called] -> " << obj << '\n';
 }
 
-// Overload A: binds to const lvalues (and rvalues if no rvalue overload is available)
-void baz_value(const Derived &derived) {
-    std::cout << "@@@--------------------------------@@@\n";
-    std::cout << "lvalue overload called: " << derived << '\n';
-    std::cout << "@@@--------------------------------@@@\n";
+// Factory returning prvalue
+Derived create_derived(std::string name = "temp_derived") {
+    return Derived(std::move(name));
 }
 
-// Overload B: preferred exact match for rvalues (prvalues and xvalues)
-void baz_value(Derived &&derived) {
-    std::cout << "@@@--------------------------------@@@\n";
-    std::cout << "rvalue overload called: " << derived << '\n';
-    std::cout << "@@@--------------------------------@@@\n";
+// Factory returning heap object via unique_ptr
+std::unique_ptr<Derived> make_heap_derived(std::string name = "heap_derived") {
+    return std::make_unique<Derived>(std::move(name));
 }
 
-// Factory function returning a temporary Derived object by value
-Derived baz() {
-    return Derived("derived-local");
+// -----------------------------------------------------------------------------
+// Forwarding Demonstrations (T&& = Universal / Forwarding Reference)
+// -----------------------------------------------------------------------------
+
+// Flawed: 'arg' has a name, so it evaluates as an lvalue inside the function body
+template <typename T>
+void relay_unconditionally_as_lvalue(T&& arg) {
+    std::cout << "--> relay_unconditionally_as_lvalue: passes 'arg' directly\n";
+    inspect_value(arg); // Always calls inspect_value(const Derived&)
 }
 
+// Flawed: unconditionally casts to rvalue, which strips lvalueness from lvalues
+template <typename T>
+void relay_unconditionally_as_rvalue(T&& arg) {
+    std::cout << "--> relay_unconditionally_as_rvalue: passes std::move(arg)\n";
+    inspect_value(std::move(arg)); // Always calls inspect_value(Derived&&)
+}
+
+// Correct: preserves the caller's value category using std::forward
+template <typename T>
+void relay_perfectly(T&& arg) {
+    std::cout << "--> relay_perfectly: passes std::forward<T>(arg)\n";
+    inspect_value(std::forward<T>(arg));
+}
+
+// =============================================================================
+// Learning Suite (main)
+// =============================================================================
 
 int main() {
-    // Change this value from 0 to 10 to test each specific concept:
-    int choice = 5;
+    // Change this value (0 to 13) to test individual concepts:
+    int choice = 11;
 
-    // =========================================================================
-    // CHOICE 0: Named Objects are Lvalues
-    // Lesson:
-    // - 'd0' has a name, a storage address, and persists across multiple expressions.
-    // - Overload resolution selects 'baz_value(const Derived&)' because an lvalue
-    //   cannot bind to a non-const rvalue reference (Derived&&).
-    // =========================================================================
+    // 0: Named variable is an Lvalue
     if (choice == 0) {
         Derived d0("derived_0");
-        baz_value(d0); // Selects lvalue overload
+        inspect_value(d0); // Calls lvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 1: Temporary Objects are Prvalues
-    // Lesson:
-    // - Derived("derived_1") creates an unnamed temporary (prvalue).
-    // - Overload resolution chooses 'baz_value(Derived&&)' because an rvalue 
-    //   reference is a more specific match than 'const Derived&'.
-    // - The temporary is destroyed immediately after the statement finishes.
-    // =========================================================================
+    // 1: Temporary object is a Prvalue
     else if (choice == 1) {
-        baz_value(Derived("derived_1")); // Selects rvalue overload
+        inspect_value(Derived("derived_1")); // Calls rvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 2: Return-by-Value Functions Yield Prvalues (C++17 Guaranteed Copy Elision)
-    // Lesson:
-    // - baz() returns a Derived object by value.
-    // - In C++17, prvalue return initialization is guaranteed to construct directly
-    //   in place without extra temporary copies or moves.
-    // - The return expression is still an rvalue, so 'baz_value(Derived&&)' is invoked.
-    // =========================================================================
+    // 2: Return-by-value function produces a Prvalue (guaranteed elision in C++17)
     else if (choice == 2) {
-        baz_value(baz()); // Selects rvalue overload
+        inspect_value(create_derived()); // Calls rvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 3: Lvalue References are Themselves Lvalues
-    // Lesson:
-    // - 'lderived' is an alias (Derived&) to an existing lvalue ('d0').
-    // - Evaluating 'lderived' gives an lvalue expression.
-    // - Calls 'baz_value(const Derived&)'.
-    // =========================================================================
+    // 3: Lvalue references are Lvalues
     else if (choice == 3) {
         Derived d0("derived_0");
-        Derived &lderived = d0;
-        baz_value(lderived); // Selects lvalue overload
+        Derived& lref = d0;
+        inspect_value(lref); // Calls lvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 4: "Named Rvalue References are Lvalues Inside Expressions"
-    // Lesson (Crucial Modern C++ Gotcha):
-    // - 'rderived' binds to an rvalue via lifetime extension (the temporary from baz()
-    //   lives as long as 'rderived' is in scope).
-    // - HOWEVER, because 'rderived' HAS A NAME, using 'rderived' as an expression
-    //   evaluates to an LVALUE!
-    // - Therefore, 'baz_value(rderived)' calls the LVALUE overload!
-    // - To invoke the rvalue overload here, you would have to write std::move(rderived).
-    // =========================================================================
+    // 4: Named Rvalue Reference evaluates as an Lvalue inside expressions!
     else if (choice == 4) {
-        Derived &&rderived = baz();
-        baz_value(rderived); // Selects LVALUE overload despite type being 'Derived&&'
+        Derived&& rref = create_derived();
+        inspect_value(rref); // Calls LVALUE overload because 'rref' has a name
     }
 
-    // =========================================================================
-    // CHOICE 5: Postfix operator++ Returns a Prvalue (By Value)
-    // Lesson:
-    // - Signature: Derived operator++(int). It makes a copy, increments original,
-    //   and returns the unincremented copy BY VALUE.
-    // - Because it is returned by value, the expression 'd0++' is a temporary (prvalue).
-    // - Selects 'baz_value(Derived&&)'.
-    // =========================================================================
+    // 5: Postfix operator++ returns a temporary copy by value (Prvalue)
     else if (choice == 5) {
         Derived d0("derived_0");
-        baz_value(d0++); // Selects rvalue overload (passes the old temporary copy)
+        inspect_value(d0++); // Calls rvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 6: Prefix operator++ Returns an Lvalue Reference
-    // Lesson:
-    // - Signature: Derived& operator++(). It increments in place and returns *this.
-    // - Returning a non-const reference makes '++d0' an LVALUE expression.
-    // - Selects 'baz_value(const Derived&)'.
-    // =========================================================================
+    // 6: Prefix operator++ returns *this by reference (Lvalue)
     else if (choice == 6) {
         Derived d0("derived_0");
-        baz_value(++d0); // Selects lvalue overload (passes mutated d0 directly)
+        inspect_value(++d0); // Calls lvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 7: Address-of Operator (&) Requires an Lvalue
-    // Lesson:
-    // - Because '++d0' is an lvalue, '&++d0' is completely valid and takes d0's address.
-    // - Conversely, '&(d0++)' fails to compile because you CANNOT take the address
-    //   of a prvalue temporary!
-    // - Dereferencing '*pD1' yields an lvalue, calling 'baz_value(const Derived&)'.
-    // =========================================================================
+    // 7: Address-of (&) requires an Lvalue
     else if (choice == 7) {
         Derived d0("derived_0");
-        Derived *pD1 = &++d0;  // Legal: ++d0 is an lvalue
-        // Derived *pD1 = &(d0++); // COMPILE ERROR: lvalue required as unary '&' operand
-        baz_value(*pD1);
+        Derived* ptr = &++d0; // Valid: ++d0 is an lvalue
+        // Derived* err = &(d0++); // COMPILE ERROR: cannot take address of prvalue
+        inspect_value(*ptr);
     }
 
-    // =========================================================================
-    // CHOICE 8: Pointer Dereference + Postfix Operator
-    // Lesson:
-    // - foo() returns a std::unique_ptr<Derived> by value.
-    // - '*foo()' yields an lvalue reference to the heap-allocated Derived.
-    // - Calling '(*foo())++' executes postfix increment on the heap object,
-    //   returning a temporary copy (prvalue).
-    // - Selects 'baz_value(Derived&&)'.
-    // - Both the temporary unique_ptr and the heap object are cleaned up at semicolon.
-    // =========================================================================
+    // 8: Pointer Dereference + Postfix returns a temporary copy (Prvalue)
     else if (choice == 8) {
-        baz_value((*foo())++); // Selects rvalue overload
+        inspect_value((*make_heap_derived())++); // Calls rvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 9: Pointer Dereference + Prefix Operator
-    // Lesson:
-    // - '++(*foo())' executes prefix increment and returns an lvalue reference
-    //   to the Derived managed by the unique_ptr.
-    // - Since the expression is an lvalue reference, it calls 'baz_value(const Derived&)'.
-    // - Note: Once the full expression finishes, the temporary std::unique_ptr from foo()
-    //   is destroyed, deleting the heap object.
-    // =========================================================================
+    // 9: Pointer Dereference + Prefix returns a reference (Lvalue)
     else if (choice == 9) {
-        baz_value(++(*foo())); // Selects lvalue overload
+        inspect_value(++(*make_heap_derived())); // Calls lvalue overload
     }
 
-    // =========================================================================
-    // CHOICE 10: std::move vs Copy Assignment and the "Moved-From" State
-    // Lesson:
-    // 1. std::move(d0) does NOT move anything by itself; it casts d0 to an xvalue (Derived&&).
-    // 2. 'd1 = std::move(d0);' invokes move-assignment:
-    //    - d1 takes ownership of d0's dynamic resources (its buffer/name).
-    //    - d0 is left in a valid, but "moved-from" state (empty/default strings, reset buffer).
-    // 3. 'd2 = d0;' invokes copy-assignment:
-    //    - Even though d0 was moved from, it remains a valid object, so it can still
-    //      be safely copied! d2 gets whatever state d0 was left with.
-    // =========================================================================
+    // 10: std::move vs. Copy Assignment & The Moved-From State
     else if (choice == 10) {
         Derived d0("derived_0");
-        std::cout << "\n";
         Derived d1("derived_1");
-        std::cout << "\n";
         Derived d2("derived_2");
-        std::cout << "\n";
 
-        std::cout << "-- Move Assignment (d1 = std::move(d0)) --\n";
-        d1 = std::move(d0); // Casts d0 to xvalue -> invokes operator=(Derived&&)
-        std::cout << "d0 after being moved: " << d0 << '\n';
-        std::cout << "d1 after move target: " << d1 << '\n';
-        std::cout << "\n";
+        std::cout << "\n-- Move Assignment (d1 = std::move(d0)) --\n";
+        d1 = std::move(d0);
+        std::cout << "d0 (moved-from): " << d0 << '\n';
+        std::cout << "d1 (new owner):  " << d1 << '\n';
 
-        std::cout << "-- Copy Assignment from moved-from object (d2 = d0) --\n";
-        d2 = d0; // d0 is valid; copy assignment operates normally
-        std::cout << "d2 after copy:        " << d2 << '\n';
-        std::cout << "\n";
+        std::cout << "\n-- Copy Assignment from moved-from object (d2 = d0) --\n";
+        d2 = d0;
+        std::cout << "d2:              " << d2 << '\n';
     }
 
-    std::cout << "\n";
+    // 11: Reference Collapsing in Explicit Type Aliases
+    // Rules:
+    //   &  + &  -> &
+    //   &  + && -> &
+    //   && + &  -> &
+    //   && + && -> &&
+    else if (choice == 11) {
+        Derived d("collapsing_demo");
+
+        using LRef = Derived&;
+        using RRef = Derived&&;
+
+        // Rule 1: (& + & -> &)
+        using Rule1 = LRef&;
+        static_assert(std::is_same_v<Rule1, Derived&>, "Must collapse to Derived&");
+        Rule1 r1 = d;
+        std::cout << "Rule 1 (& + & -> &):   ";
+        inspect_value(r1);
+
+        // Rule 2: (& + && -> &)
+        using Rule2 = LRef&&;
+        static_assert(std::is_same_v<Rule2, Derived&>, "Must collapse to Derived&");
+        Rule2 r2 = d;
+        std::cout << "Rule 2 (& + && -> &):  ";
+        inspect_value(r2);
+
+        // Rule 3: (&& + & -> &)
+        using Rule3 = RRef&;
+        static_assert(std::is_same_v<Rule3, Derived&>, "Must collapse to Derived&");
+        Rule3 r3 = d;
+        std::cout << "Rule 3 (&& + & -> &):  ";
+        inspect_value(r3);
+
+        // Rule 4: (&& + && -> &&)
+        using Rule4 = RRef&&;
+        static_assert(std::is_same_v<Rule4, Derived&&>, "Must collapse to Derived&&");
+        Rule4 r4 = create_derived();
+        std::cout << "Rule 4 (&& + && -> &&): ";
+        inspect_value(std::move(r4));
+    }
+
+    // 12: Why We Need std::forward (The Forwarding Problem)
+    else if (choice == 12) {
+        Derived d("original_d");
+
+        std::cout << "--- 1. Passing temporary to relay_unconditionally_as_lvalue ---\n";
+        // Loss of rvalueness: passed rvalue, but wrapper calls lvalue overload
+        relay_unconditionally_as_lvalue(create_derived());
+
+        std::cout << "\n--- 2. Passing lvalue to relay_unconditionally_as_rvalue ---\n";
+        // Dangerous move: passed lvalue, but wrapper forces it into rvalue overload
+        relay_unconditionally_as_rvalue(d);
+    }
+
+    // 13: Perfect Forwarding with std::forward<T>
+    else if (choice == 13) {
+        Derived d("original_d");
+
+        std::cout << "--- Forwarding an Lvalue ---\n";
+        // T deduces to Derived& -> T&& collapses to Derived& -> forward yields Derived&
+        relay_perfectly(d);
+
+        std::cout << "\n--- Forwarding an Rvalue ---\n";
+        // T deduces to Derived -> T&& is Derived&& -> forward yields Derived&&
+        relay_perfectly(create_derived());
+    }
+
+    std::cout << '\n';
     return 0;
 }
